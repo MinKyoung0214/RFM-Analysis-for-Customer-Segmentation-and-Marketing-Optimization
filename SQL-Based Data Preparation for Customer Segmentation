@@ -1,0 +1,89 @@
+USE my_sql;
+select *
+from rrffmm_analysis_dataset2;
+
+SELECT 
+  CustomerID,
+  MAX(STR_TO_DATE(InvoiceDate, '%c/%e/%Y %k:%i')) AS LastPurchaseDate,
+  COUNT(DISTINCT InvoiceNo) AS Frequency,
+  ROUND(SUM(Quantity * UnitPrice), 2) AS Monetary
+FROM rrffmm_analysis_dataset2
+WHERE Quantity > 0 
+  AND CustomerID IS NOT NULL
+GROUP BY CustomerID;
+
+-- recency : 기준일('2011-12-10')과 고객의 가장 최근 구매일 사이의 일수 차이
+-- frequency : 고객별 구매 횟수
+-- monetary : 고객의 총 구매 금액
+-- recency_score : 고객의 마지막 구매일과 기준일('2011-12-10') 사이의 일수 차이를 바탕으로 산출된 점수 5일 이하 → 5점, 5일 초과 ~ 26일 → 4점, 26일 초과 ~ 85일 → 3점, 85일 초과 ~ 262일 → 2점, 262일 초과 → 1점
+-- frequency_score : 고객의 거래 횟수에 따른 점수 13회 이상 구매 → 5점, 7회 이상 구매 → 4점, 4회 이상 구매 → 3점, 2회 이상 구매 → 2점, 2회 미만 구매 → 1점
+-- monetary_score : 고객의 총 구매 금액에 따른 점수 5840.182 이상 → 5점, 1353.740 이상 → 4점, 411.551 이상 → 3점, 156.566 이상 → 2점, 156.566 미만 → 1점
+-- rfm_segment : recency_score, frequency_score, monetary_score 값을 각각 문자형으로 변환한 후 연결
+
+
+SELECT 
+  DATEDIFF('2011-12-10', t.LastPurchaseDate) AS Recency,
+  t.Frequency AS frequency,
+  t.Monetary AS monetary,
+  CASE 
+    WHEN DATEDIFF('2011-12-10', t.LastPurchaseDate) <= 5 THEN 5
+    WHEN DATEDIFF('2011-12-10', t.LastPurchaseDate) <= 26 THEN 4
+    WHEN DATEDIFF('2011-12-10', t.LastPurchaseDate) <= 85 THEN 3
+    WHEN DATEDIFF('2011-12-10', t.LastPurchaseDate) <= 262 THEN 2
+    ELSE 1
+  END AS recency_score,
+  CASE 
+    WHEN t.Frequency >= 13 THEN 5
+    WHEN t.Frequency >= 7 THEN 4
+    WHEN t.Frequency >= 4 THEN 3
+    WHEN t.Frequency >= 2 THEN 2
+    ELSE 1
+  END AS frequency_score,
+  CASE 
+    WHEN t.Monetary >= 5840.182 THEN 5
+    WHEN t.Monetary >= 1353.740 THEN 4
+    WHEN t.Monetary >= 411.551 THEN 3
+    WHEN t.Monetary >= 156.566 THEN 2
+    ELSE 1
+  END AS monetary_score,
+  CONCAT(
+    CAST(
+      CASE 
+        WHEN DATEDIFF('2011-12-10', t.LastPurchaseDate) <= 5 THEN 5
+        WHEN DATEDIFF('2011-12-10', t.LastPurchaseDate) <= 26 THEN 4
+        WHEN DATEDIFF('2011-12-10', t.LastPurchaseDate) <= 85 THEN 3
+        WHEN DATEDIFF('2011-12-10', t.LastPurchaseDate) <= 262 THEN 2
+        ELSE 1
+      END AS CHAR
+    ),
+    CAST(
+      CASE 
+        WHEN t.Frequency >= 13 THEN 5
+        WHEN t.Frequency >= 7 THEN 4
+        WHEN t.Frequency >= 4 THEN 3
+        WHEN t.Frequency >= 2 THEN 2
+        ELSE 1
+      END AS CHAR
+    ),
+    CAST(
+      CASE 
+        WHEN t.Monetary >= 5840.182 THEN 5
+        WHEN t.Monetary >= 1353.740 THEN 4
+        WHEN t.Monetary >= 411.551 THEN 3
+        WHEN t.Monetary >= 156.566 THEN 2
+        ELSE 1
+      END AS CHAR
+    )
+  ) AS rfm_segment
+FROM (
+  SELECT 
+    CustomerID,
+    MAX(STR_TO_DATE(InvoiceDate, '%c/%e/%Y %k:%i')) AS LastPurchaseDate,
+    COUNT(DISTINCT InvoiceNo) AS Frequency,
+    ROUND(SUM(Quantity * UnitPrice), 2) AS Monetary
+  FROM rrffmm_analysis_dataset2
+  WHERE Quantity > 0 
+    AND CustomerID IS NOT NULL
+  GROUP BY CustomerID
+) AS t;
+
